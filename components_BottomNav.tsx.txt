@@ -1,0 +1,52 @@
+import React from 'react';
+import { Map, Users, UserPlus, UserCircle } from './Icons';
+
+interface BottomNavProps {
+  activeTab: 'map' | 'people';
+  onTabChange: (tab: 'map' | 'people') => void;
+  onAddClick: () => void;
+  onProfileClick: () => void;
+}
+
+const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, onAddClick, onProfileClick }) => {
+  return (
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-[1100] px-4 pb-safe">
+      <div className="flex justify-between items-center h-16">
+        <button 
+          onClick={() => onTabChange('map')}
+          className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${activeTab === 'map' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          <Map className="w-6 h-6" />
+          <span className="text-[10px] font-bold">Map</span>
+        </button>
+
+        <button 
+          onClick={() => onTabChange('people')}
+          className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${activeTab === 'people' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          <Users className="w-6 h-6" />
+          <span className="text-[10px] font-bold">People</span>
+        </button>
+
+        <button 
+          onClick={onAddClick}
+          className="flex-1 flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-indigo-600 transition-colors"
+        >
+          <div className="w-10 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-0.5">
+            <UserPlus className="w-5 h-5" />
+          </div>
+        </button>
+
+        <button 
+          onClick={onProfileClick}
+          className="flex-1 flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          <UserCircle className="w-6 h-6" />
+          <span className="text-[10px] font-bold">Me</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default BottomNav;

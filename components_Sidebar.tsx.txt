@@ -1,0 +1,326 @@
+import React, { useState } from 'react';
+import { Friend, Coordinates } from '../types';
+import { Battery, BatteryWarning, Navigation, Plus, Search, MapPin, Shield, ChevronRight, Loader2, Locate, UserPlus, Share2, History, Clock, Copy } from 'lucide-react';
+import * as GeminiService from '../services/geminiService';
+
+interface SidebarProps {
+  friends: Friend[];
+  selectedFriendId: string | null;
+  onSelectFriend: (id: string) => void;
+  userLocation: Coordinates | null;
+  onRecenter: () => void;
+  onOpenAddMember: () => void;
+  userCode: string;
+  isHistoryMode: boolean;
+  onToggleHistoryMode: (active: boolean) => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ 
+    friends, 
+    selectedFriendId, 
+    onSelectFriend, 
+    userLocation, 
+    onRecenter, 
+    onOpenAddMember, 
+    userCode,
+    isHistoryMode,
+    onToggleHistoryMode
+}) => {
+  const selectedFriend = friends.find(f => f.id === selectedFriendId);
+  const [insight, setInsight] = useState<{ text: string, urls: string[] } | null>(null);
+  const [loadingInsight, setLoadingInsight] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleGetInsight = async () => {
+    if (!selectedFriend || !userLocation) return;
+    setLoadingInsight(true);
+    const result = await GeminiService.getFriendInsight(selectedFriend, userLocation);
+    setInsight(result);
+    setLoadingInsight(false);
+  };
+
+  const handleSearchNearby = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFriend || !searchQuery.trim()) return;
+    setLoadingInsight(true);
+    const result = await GeminiService.findNearbyPlaces(searchQuery, selectedFriend.location);
+    setInsight(result);
+    setLoadingInsight(false);
+  };
+
+  // Reset insight when selection changes
+  React.useEffect(() => {
+    setInsight(null);
+    setSearchQuery('');
+    // Default to Live view when switching friends
+    onToggleHistoryMode(false);
+  }, [selectedFriendId]);
+
+  return (
+    <div className="h-full flex flex-col bg-white border-r border-slate-200 shadow-xl w-full pointer-events-auto">
+      
+      {/* Header */}
+      <div className="p-6 border-b border-slate-100 bg-white">
+        <div className="flex justify-between items-center mb-1">
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Shield className="w-8 h-8 text-indigo-600" />
+            GeoKin
+            </h1>
+            <button 
+                onClick={onOpenAddMember}
+                className="p-2 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition-colors shadow-sm"
+                title="Add Family Member"
+            >
+                <UserPlus className="w-5 h-5" />
+            </button>
+        </div>
+        <p className="text-sm text-slate-500">Connected Family Safety</p>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto">
+        {!selectedFriend ? (
+          /* List View */
+          <div className="p-4 space-y-3">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Your Circle</h2>
+              <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+                {friends.length} Active
+              </span>
+            </div>
+            
+            {friends.map(friend => (
+              <button
+                key={friend.id}
+                onClick={() => onSelectFriend(friend.id)}
+                className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-200 text-left group"
+              >
+                <div className="relative">
+                    <img src={friend.avatar} alt={friend.name} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                    <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${friend.status === 'Moving' ? 'bg-green-500' : 'bg-amber-400'}`}></div>
+                </div>
+                <div className="flex-1">
+                    <h3 className="font-semibold text-slate-800">{friend.name}</h3>
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {friend.status === 'Moving' ? 'On the move' : 'At current location'}
+                    </p>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                    <div className={`flex items-center gap-1 text-xs ${friend.batteryLevel < 20 ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
+                        {friend.batteryLevel < 20 ? <BatteryWarning className="w-3 h-3" /> : <Battery className="w-3 h-3" />}
+                        {friend.batteryLevel}%
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400" />
+                </div>
+              </button>
+            ))}
+
+            {friends.length === 0 && (
+                <div className="text-center p-8 bg-slate-50 rounded-xl border border-dashed border-slate-200 mt-4">
+                    <UserPlus className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm text-slate-500">No family members yet.</p>
+                    <button onClick={onOpenAddMember} className="text-indigo-600 font-semibold text-sm mt-1 hover:underline">Connect someone</button>
+                </div>
+            )}
+          </div>
+        ) : (
+          /* Detail View */
+          <div className="flex flex-col h-full">
+             <div className="p-6 bg-slate-50 border-b border-slate-100">
+                <button onClick={() => onSelectFriend('')} className="text-xs font-semibold text-indigo-600 mb-4 hover:underline">
+                    &larr; Back to Circle
+                </button>
+                <div className="flex items-center gap-4">
+                    <img src={selectedFriend.avatar} className="w-16 h-16 rounded-full border-4 border-white shadow-md" />
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-800">{selectedFriend.name}</h2>
+                        <div className="flex items-center gap-2 text-sm text-slate-600 mt-1">
+                            <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-full text-xs font-medium">
+                                {selectedFriend.status}
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <Battery className="w-3 h-3" /> {selectedFriend.batteryLevel}%
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex items-center mt-6 bg-white p-1 rounded-lg border border-slate-200">
+                    <button 
+                        onClick={() => onToggleHistoryMode(false)}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${!isHistoryMode ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                        Live View
+                    </button>
+                    <button 
+                        onClick={() => onToggleHistoryMode(true)}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${isHistoryMode ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                        Timeline
+                    </button>
+                </div>
+             </div>
+
+             {/* Tab Content */}
+             {!isHistoryMode ? (
+                 <div className="flex-1 flex flex-col overflow-y-auto">
+                    {/* Live Actions */}
+                    <div className="p-4 grid grid-cols-2 gap-3 shrink-0">
+                        <button 
+                            onClick={handleGetInsight}
+                            disabled={loadingInsight}
+                            className="flex flex-col items-center justify-center p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-70"
+                        >
+                            {loadingInsight ? <Loader2 className="w-6 h-6 animate-spin mb-1" /> : <Shield className="w-6 h-6 mb-1" />}
+                            <span className="text-xs font-medium">Safety Check</span>
+                        </button>
+                        <button 
+                            className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+                            onClick={() => window.open(`tel:${selectedFriend.phone}`)}
+                        >
+                            <div className="w-6 h-6 mb-1 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold">P</div>
+                            <span className="text-xs font-medium">Call</span>
+                        </button>
+                    </div>
+
+                    {/* Gemini Insight Panel */}
+                    <div className="flex-1 p-4 bg-white">
+                        <div className="mb-4">
+                            <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                Smart Assistant
+                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-gradient-to-r from-blue-500 to-purple-500 text-white">AI</span>
+                            </h3>
+                            
+                            {insight ? (
+                                <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-sm text-indigo-900 leading-relaxed animate-in fade-in slide-in-from-bottom-2">
+                                    <p className="whitespace-pre-wrap">{insight.text}</p>
+                                    {insight.urls.length > 0 && (
+                                        <div className="mt-3 pt-3 border-t border-indigo-200">
+                                            <p className="text-xs font-bold text-indigo-400 mb-1">References:</p>
+                                            <ul className="space-y-1">
+                                                {insight.urls.map((url, i) => (
+                                                    <li key={i}>
+                                                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 underline truncate block">
+                                                            {new URL(url).hostname} link
+                                                        </a>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="text-center p-6 border-2 border-dashed border-slate-200 rounded-xl">
+                                    <p className="text-xs text-slate-400">
+                                        Tap "Safety Check" to get a live AI analysis of {selectedFriend.name}'s location context.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Nearby Search */}
+                        <div className="mt-6">
+                            <h3 className="text-sm font-bold text-slate-800 mb-2">Find Nearby</h3>
+                            <form onSubmit={handleSearchNearby} className="relative">
+                                <input 
+                                    type="text" 
+                                    placeholder={`"Coffee", "Gas Station"...`}
+                                    className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                            </form>
+                        </div>
+                    </div>
+                 </div>
+             ) : (
+                /* Timeline View */
+                <div className="flex-1 overflow-y-auto bg-white p-4">
+                    <div className="space-y-6 relative before:absolute before:left-[19px] before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-200">
+                        {/* Current Item */}
+                        <div className="relative flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-full bg-indigo-100 border-4 border-white shadow-sm flex items-center justify-center shrink-0 z-10">
+                                <Navigation className="w-5 h-5 text-indigo-600" />
+                            </div>
+                            <div className="pt-1">
+                                <p className="font-bold text-slate-800 text-sm">Current Location</p>
+                                <p className="text-xs text-slate-500">
+                                    {selectedFriend.status} • Battery {selectedFriend.batteryLevel}%
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* History Items */}
+                        {selectedFriend.history.length > 0 ? (
+                            [...selectedFriend.history].reverse().map((item, idx) => (
+                                <div key={item.id} className="relative flex items-start gap-4 group">
+                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shrink-0 z-10 group-hover:border-indigo-300 transition-colors">
+                                        <Clock className="w-4 h-4 text-slate-400" />
+                                    </div>
+                                    <div className="pt-1 flex-1">
+                                        <div className="flex justify-between items-center">
+                                            <p className="font-semibold text-slate-700 text-sm">
+                                                {item.label || 'Location Update'}
+                                            </p>
+                                            <span className="text-[10px] text-slate-400 font-mono">
+                                                {item.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            {item.location.lat.toFixed(4)}, {item.location.lng.toFixed(4)}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="pl-14 text-xs text-slate-400 italic">No history recorded today.</div>
+                        )}
+                        
+                        <div className="relative flex items-start gap-4">
+                             <div className="w-10 h-10 rounded-full bg-slate-100 border-4 border-white flex items-center justify-center shrink-0 z-10">
+                                <div className="w-2 h-2 rounded-full bg-slate-300"></div>
+                             </div>
+                             <div className="pt-2">
+                                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Start of Day</p>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+             )}
+          </div>
+        )}
+      </div>
+
+      {/* User Status Footer - Hidden on mobile as we use the BottomNav "Me" tab */}
+      <div className="border-t border-slate-200 bg-slate-50 hidden md:block">
+        <div className="px-4 py-2 flex items-center justify-between border-b border-slate-100">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Your Family Code</span>
+            <div className="flex items-center gap-2 bg-white px-2 py-1 rounded border border-slate-200">
+                <span className="text-xs font-mono font-bold text-slate-700 select-all">{userCode}</span>
+                <Copy className="w-3 h-3 text-slate-400 cursor-pointer hover:text-indigo-600" onClick={() => navigator.clipboard.writeText(userCode)} />
+            </div>
+        </div>
+        <button 
+            onClick={onRecenter}
+            className="p-4 hover:bg-slate-100 transition-colors cursor-pointer text-left w-full group"
+        >
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold shadow-sm group-hover:scale-105 transition-transform">You</div>
+                <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm font-bold text-slate-700">My Location</p>
+                        <Locate className="w-4 h-4 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <p className="text-xs text-slate-500">Live • Tracking Active</p>
+                </div>
+            </div>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default Sidebar;

@@ -1,0 +1,362 @@
+import React, { useState, useEffect, useRef } from 'react';
+import MapComponent from './components/MapComponent';
+import Sidebar from './components/Sidebar';
+import AddMemberModal from './components/AddMemberModal';
+import BottomNav from './components/BottomNav';
+import ProfileModal from './components/ProfileModal';
+import { Friend, Coordinates, LocationStatus } from './types';
+import { INITIAL_FRIENDS, DEFAULT_CENTER, POTENTIAL_FRIENDS } from './constants';
+import { Shield, Locate, Layers } from 'lucide-react';
+
+const App: React.FC = () => {
+  const [userLocation, setUserLocation] = useState<Coordinates | null>(null);
+  const [friends, setFriends] = useState<Friend[]>(INITIAL_FRIENDS);
+  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
+  const [mapCenter, setMapCenter] = useState<Coordinates>(DEFAULT_CENTER);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [onboardingName, setOnboardingName] = useState('');
+  const [mapStyle, setMapStyle] = useState<'standard' | 'satellite'>('standard');
+  const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  const [isHistoryMode, setIsHistoryMode] = useState(false);
+  
+  // Mobile specific states
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  // Simulation tick counter for history recording
+  const tickRef = useRef(0);
+
+  // Generate a random code for this session for the user
+  const [userCode] = useState(() => `GK-${Math.floor(1000 + Math.random() * 9000)}`);
+
+  // Handle initial Geolocation
+  useEffect(() => {
+    if (isAuthenticated) {
+        if ("geolocation" in navigator) {
+            const geoOptions = {
+                enableHighAccuracy: true, // Use GPS for perfect location
+                timeout: 10000,
+                maximumAge: 0
+            };
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const coords = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    setUserLocation(coords);
+                    setMapCenter(coords);
+                    
+                    // Reposition mock friends around the user for the demo
+                    setFriends(prev => prev.map((f, i) => {
+                        const lat = coords.lat + (Math.random() - 0.5) * 0.02;
+                        const lng = coords.lng + (Math.random() - 0.5) * 0.02;
+                        return {
+                            ...f,
+                            location: { lat, lng },
+                            // Reset history to be relative to new location
+                            history: f.history.map(h => ({
+                                ...h,
+                                location: {
+                                    lat: lat + (Math.random() - 0.5) * 0.01,
+                                    lng: lng + (Math.random() - 0.5) * 0.01
+                                }
+                            }))
+                        };
+                    }));
+                },
+                (error) => {
+                    console.error("Error getting location", error);
+                    // Keep default center if failed
+                },
+                geoOptions
+            );
+
+            // Watch position with high accuracy
+            const watchId = navigator.geolocation.watchPosition((position) => {
+                setUserLocation({
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                });
+            }, (error) => {
+                console.error("Location watch error", error);
+            }, geoOptions);
+
+            return () => navigator.geolocation.clearWatch(watchId);
+        }
+    }
+  }, [isAuthenticated]);
+
+  // Simulation Loop for Friends
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(() => {
+      tickRef.current += 1;
+      const shouldRecordHistory = tickRef.current % 5 === 0; // Record history every 5 ticks (10s)
+
+      setFriends(currentFriends => 
+        currentFriends.map(friend => {
+          if (friend.status === LocationStatus.STATIONARY) return friend;
+          
+          // Random walk simulation
+          const moveLat = (Math.random() - 0.5) * 0.0005;
+          const moveLng = (Math.random() - 0.5) * 0.0005;
+          
+          const newLocation = {
+              lat: friend.location.lat + moveLat,
+              lng: friend.location.lng + moveLng
+          };
+
+          const updatedHistory = shouldRecordHistory 
+             ? [...friend.history, { 
+                 id: `h_${Date.now()}`, 
+                 location: newLocation, 
+                 timestamp: new Date() 
+               }]
+             : friend.history;
+
+          return {
+            ...friend,
+            location: newLocation,
+            lastUpdated: new Date(),
+            history: updatedHistory
+          };
+        })
+      );
+    }, 2000); // Update every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
+  const handleSelectFriend = (id: string) => {
+    if (id === selectedFriendId) {
+        // Deselect if already selected
+        setSelectedFriendId(null);
+        if (userLocation) setMapCenter(userLocation);
+        // Don't close sidebar on desktop, but maybe on mobile? 
+        // Let's keep sidebar open on mobile if in 'People' mode, but if we deselected, we probably want to see the list again.
+    } else {
+        setSelectedFriendId(id);
+        const friend = friends.find(f => f.id === id);
+        if (friend) {
+            setMapCenter(friend.location);
+            setIsSidebarOpen(true); // Ensure sidebar is visible on mobile when a friend is selected
+        } else if (id === '' && userLocation) {
+            // Clearing selection
+            setMapCenter(userLocation);
+            setSelectedFriendId(null);
+        }
+    }
+  };
+
+  const handleRecenter = () => {
+    if (userLocation) {
+        // Clone object to ensure effect triggers even if values match current state
+        setMapCenter({ ...userLocation });
+        setSelectedFriendId(null);
+    }
+  };
+
+  const toggleMapStyle = () => {
+    setMapStyle(prev => prev === 'standard' ? 'satellite' : 'standard');
+  };
+
+  const handleAddMember = async (code: string): Promise<boolean> => {
+    // In a real app, this would verify the code with a backend
+    // Here, we simulate adding a random potential friend if they aren't already added
+    
+    // Pick a random potential friend that isn't already in the list
+    const available = POTENTIAL_FRIENDS.filter(
+        pf => !friends.some(f => f.name === pf.name)
+    );
+
+    if (available.length === 0) return true; // Everyone added already
+
+    const newFriendBase = available[Math.floor(Math.random() * available.length)];
+    
+    // Generate a location near the user
+    const baseLat = userLocation ? userLocation.lat : DEFAULT_CENTER.lat;
+    const baseLng = userLocation ? userLocation.lng : DEFAULT_CENTER.lng;
+    const startLat = baseLat + (Math.random() - 0.5) * 0.03;
+    const startLng = baseLng + (Math.random() - 0.5) * 0.03;
+
+    const newFriend: Friend = {
+        id: `new_${Date.now()}`,
+        name: newFriendBase.name || 'New Member',
+        avatar: newFriendBase.avatar || 'https://picsum.photos/100/100',
+        isSelf: false,
+        location: { lat: startLat, lng: startLng },
+        lastUpdated: new Date(),
+        status: LocationStatus.MOVING,
+        batteryLevel: Math.floor(Math.random() * 100),
+        phone: newFriendBase.phone || '555-0000',
+        history: [] // New friend starts with empty history
+    };
+
+    setFriends(prev => [...prev, newFriend]);
+    // Auto select the new friend to show them on map
+    setSelectedFriendId(newFriend.id);
+    setMapCenter(newFriend.location);
+    setIsSidebarOpen(true);
+    
+    return true;
+  };
+
+  // Auth Screen
+  if (!isAuthenticated) {
+    return (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+            <div className="bg-white max-w-md w-full rounded-2xl p-8 shadow-2xl text-center space-y-6">
+                <div className="w-20 h-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Shield className="w-10 h-10" />
+                </div>
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-800">Welcome to GeoKin</h1>
+                    <p className="text-slate-500 mt-2">Connect with family and keep them safe with AI-powered insights.</p>
+                </div>
+                
+                <div className="space-y-4 text-left">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Your Name</label>
+                        <input 
+                            type="text" 
+                            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                            placeholder="e.g. John Doe"
+                            value={onboardingName}
+                            onChange={e => setOnboardingName(e.target.value)}
+                        />
+                    </div>
+                    <button 
+                        onClick={() => onboardingName && setIsAuthenticated(true)}
+                        disabled={!onboardingName}
+                        className="w-full py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Start Tracking
+                    </button>
+                    <p className="text-xs text-center text-slate-400">
+                        By continuing, you grant permission to access your location.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen w-screen bg-slate-100 overflow-hidden relative">
+      <AddMemberModal 
+        isOpen={isAddMemberModalOpen}
+        onClose={() => setIsAddMemberModalOpen(false)}
+        onAddMember={handleAddMember}
+      />
+
+      <ProfileModal 
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        userCode={userCode}
+        userName={onboardingName}
+        location={userLocation}
+      />
+
+      {/* Sidebar - Logic: 
+          Desktop: Always relative and visible (md:relative md:translate-x-0)
+          Mobile: Absolute, transitions based on isSidebarOpen state 
+      */}
+      <div className={`
+        absolute inset-y-0 left-0 z-30 w-full md:w-96 
+        transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:relative md:translate-x-0 md:shadow-none
+        h-[calc(100%-64px)] md:h-full bottom-16 md:bottom-0
+      `}>
+          <Sidebar 
+            friends={friends} 
+            selectedFriendId={selectedFriendId} 
+            onSelectFriend={handleSelectFriend}
+            userLocation={userLocation}
+            onRecenter={handleRecenter}
+            onOpenAddMember={() => setIsAddMemberModalOpen(true)}
+            userCode={userCode}
+            isHistoryMode={isHistoryMode}
+            onToggleHistoryMode={setIsHistoryMode}
+          />
+      </div>
+
+      {/* Main Map Area */}
+      <div className="flex-1 relative h-full w-full">
+        {/* Mobile Toggle Button for Sidebar when no friend selected & sidebar is closed? 
+            Actually, bottom nav handles opening sidebar now. 
+            We just need the Title on top.
+        */}
+        {!selectedFriendId && !isSidebarOpen && (
+             <div className="absolute top-4 left-4 z-[1000] md:hidden">
+                <div className="bg-white/90 backdrop-blur p-2 rounded-lg shadow-lg border border-slate-200">
+                    <p className="text-xs font-bold text-slate-800">GeoKin</p>
+                </div>
+             </div>
+        )}
+        
+        <MapComponent 
+            center={mapCenter}
+            friends={friends}
+            userLocation={userLocation}
+            selectedFriendId={selectedFriendId}
+            onSelectFriend={(id) => {
+                handleSelectFriend(id);
+                // On mobile, if we tap a marker, we generally want to see details
+                if (window.innerWidth < 768) {
+                    setIsSidebarOpen(true);
+                }
+            }}
+            mapStyle={mapStyle}
+            showHistoryPath={isHistoryMode}
+        />
+
+        {/* Map Controls - Positioned higher on mobile to avoid bottom nav */}
+        <div className="absolute bottom-24 md:bottom-6 right-6 z-[1000] flex flex-col gap-3">
+             {/* Map Style Toggle */}
+            <button
+                onClick={toggleMapStyle}
+                className="p-3 rounded-full shadow-lg transition-all active:scale-95 flex items-center justify-center bg-white text-slate-700 hover:bg-slate-50 hover:text-indigo-600"
+                title={`Switch to ${mapStyle === 'standard' ? 'Satellite' : 'Map'} view`}
+            >
+                <Layers className="w-6 h-6" />
+            </button>
+
+            {/* My Location Button */}
+            <button
+                onClick={handleRecenter}
+                disabled={!userLocation}
+                className={`p-3 rounded-full shadow-lg transition-all active:scale-95 flex items-center justify-center 
+                    ${userLocation 
+                        ? 'bg-white text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700' 
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                title="Recenter on my location"
+            >
+                <Locate className="w-6 h-6" />
+            </button>
+        </div>
+      </div>
+
+      {/* Bottom Navigation (Mobile Only) */}
+      <BottomNav 
+        activeTab={isSidebarOpen ? 'people' : 'map'}
+        onTabChange={(tab) => {
+            if (tab === 'map') {
+                setIsSidebarOpen(false);
+                setSelectedFriendId(null);
+            } else {
+                setIsSidebarOpen(true);
+            }
+        }}
+        onAddClick={() => setIsAddMemberModalOpen(true)}
+        onProfileClick={() => setIsProfileModalOpen(true)}
+      />
+    </div>
+  );
+};
+
+export default App;

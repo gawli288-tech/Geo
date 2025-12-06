@@ -1,0 +1,9 @@
+{
+  "appId": "com.geokin.tracker",
+  "appName": "GeoKin",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -1,0 +1,74 @@
+import React from 'react';
+import { Coordinates, Friend, LocationStatus } from './types';
+
+export const DEFAULT_CENTER: Coordinates = {
+  lat: 40.7128, // NYC default
+  lng: -74.0060,
+};
+
+export const MOCK_AVATARS = [
+  'https://picsum.photos/100/100?random=1',
+  'https://picsum.photos/100/100?random=2',
+  'https://picsum.photos/100/100?random=3',
+  'https://picsum.photos/100/100?random=4',
+];
+
+const generateMockHistory = (baseLat: number, baseLng: number): any[] => {
+  const history = [];
+  const now = new Date();
+  for (let i = 5; i > 0; i--) {
+    const time = new Date(now.getTime() - i * 30 * 60000); // Every 30 mins
+    history.push({
+      id: `h_${i}`,
+      timestamp: time,
+      location: {
+        lat: baseLat + (Math.random() - 0.5) * 0.01,
+        lng: baseLng + (Math.random() - 0.5) * 0.01
+      },
+      label: i === 5 ? 'Home' : (i === 3 ? 'Coffee Shop' : undefined)
+    });
+  }
+  return history;
+};
+
+export const INITIAL_FRIENDS: Friend[] = [
+  {
+    id: 'f1',
+    name: 'Mom',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mom',
+    isSelf: false,
+    location: { lat: 40.7150, lng: -74.0090 }, // Slightly offset from default
+    lastUpdated: new Date(),
+    status: LocationStatus.STATIONARY,
+    batteryLevel: 85,
+    phone: '555-0101',
+    history: generateMockHistory(40.7150, -74.0090)
+  },
+  {
+    id: 'f2',
+    name: 'Brother',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Bro',
+    isSelf: false,
+    location: { lat: 40.7110, lng: -74.0020 },
+    lastUpdated: new Date(),
+    status: LocationStatus.MOVING,
+    batteryLevel: 42,
+    phone: '555-0102',
+    history: generateMockHistory(40.7110, -74.0020)
+  }
+];
+
+export const POTENTIAL_FRIENDS: Partial<Friend>[] = [
+  { name: 'Dad', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dad', phone: '555-0201' },
+  { name: 'Sister', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sis', phone: '555-0202' },
+  { name: 'Grandma', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Granny', phone: '555-0203' },
+  { name: 'Uncle Joe', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Joe', phone: '555-0204' },
+  { name: 'Aunt May', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=May', phone: '555-0205' },
+];
+
+// Switched to CartoDB Voyager for faster loading speeds and modern look
+export const MAP_TILE_URL = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+export const MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+export const SATELLITE_TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+export const SATELLITE_ATTRIBUTION = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';

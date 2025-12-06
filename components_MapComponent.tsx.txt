@@ -1,0 +1,133 @@
+import React, { useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, CircleMarker } from 'react-leaflet';
+import L from 'leaflet';
+import { Coordinates, Friend } from '../types';
+import { MAP_TILE_URL, MAP_ATTRIBUTION, SATELLITE_TILE_URL, SATELLITE_ATTRIBUTION } from '../constants';
+
+// Fix for default markers in Leaflet with React
+// We will use custom DivIcons instead for better styling
+
+interface MapComponentProps {
+  center: Coordinates;
+  friends: Friend[];
+  userLocation: Coordinates | null;
+  selectedFriendId: string | null;
+  onSelectFriend: (id: string) => void;
+  mapStyle: 'standard' | 'satellite';
+  showHistoryPath?: boolean;
+}
+
+const RecenterMap = ({ center }: { center: Coordinates }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.flyTo([center.lat, center.lng], map.getZoom());
+  }, [center, map]);
+  return null;
+};
+
+const createCustomIcon = (avatarUrl: string, isSelected: boolean, isSelf: boolean) => {
+  const size = isSelected ? 48 : 36;
+  const border = isSelf ? 'border-blue-500' : (isSelected ? 'border-indigo-600' : 'border-white');
+  
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `
+      <div class="relative transition-all duration-300 ${isSelected ? 'scale-110 z-50' : 'scale-100 z-10'}">
+        <div class="w-${size/4} h-${size/4} rounded-full overflow-hidden border-4 ${border} shadow-lg box-content bg-white" style="width: ${size}px; height: ${size}px;">
+          <img src="${avatarUrl}" class="w-full h-full object-cover" />
+        </div>
+        ${isSelf ? '<div class="absolute -bottom-1 -right-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full"></div>' : ''}
+      </div>
+    `,
+    iconSize: [size + 8, size + 8],
+    iconAnchor: [(size + 8) / 2, size + 8], // Center bottom-ish anchor
+    popupAnchor: [0, -size],
+  });
+};
+
+const MapComponent: React.FC<MapComponentProps> = ({ 
+  center, 
+  friends, 
+  userLocation, 
+  selectedFriendId,
+  onSelectFriend,
+  mapStyle,
+  showHistoryPath = false
+}) => {
+  
+  const selectedFriend = friends.find(f => f.id === selectedFriendId);
+
+  return (
+    <MapContainer 
+      center={[center.lat, center.lng]} 
+      zoom={13} 
+      className="w-full h-full z-0"
+      zoomControl={false}
+    >
+      <TileLayer
+        attribution={mapStyle === 'satellite' ? SATELLITE_ATTRIBUTION : MAP_ATTRIBUTION}
+        url={mapStyle === 'satellite' ? SATELLITE_TILE_URL : MAP_TILE_URL}
+      />
+      
+      <RecenterMap center={center} />
+
+      {/* History Path */}
+      {showHistoryPath && selectedFriend && selectedFriend.history.length > 0 && (
+        <>
+          <Polyline 
+            positions={selectedFriend.history.map(h => [h.location.lat, h.location.lng])}
+            pathOptions={{ color: '#4f46e5', weight: 4, dashArray: '10, 10', opacity: 0.6 }}
+          />
+          {/* Add dashed line to current location */}
+          <Polyline 
+            positions={[
+              [selectedFriend.history[selectedFriend.history.length - 1].location.lat, selectedFriend.history[selectedFriend.history.length - 1].location.lng],
+              [selectedFriend.location.lat, selectedFriend.location.lng]
+            ]}
+            pathOptions={{ color: '#4f46e5', weight: 4, dashArray: '5, 10', opacity: 0.4 }}
+          />
+          
+          {selectedFriend.history.map((point, idx) => (
+             <CircleMarker 
+                key={point.id}
+                center={[point.location.lat, point.location.lng]}
+                pathOptions={{ fillColor: '#fff', color: '#4f46e5', weight: 2, opacity: 1, fillOpacity: 1 }}
+                radius={4}
+             >
+                <Popup>
+                    <div className="text-xs font-semibold">{point.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                    {point.label && <div className="text-xs text-slate-500">{point.label}</div>}
+                </Popup>
+             </CircleMarker>
+          ))}
+        </>
+      )}
+
+      {/* Render Friends */}
+      {friends.map((friend) => (
+        <Marker
+          key={friend.id}
+          position={[friend.location.lat, friend.location.lng]}
+          icon={createCustomIcon(friend.avatar, friend.id === selectedFriendId, false)}
+          eventHandlers={{
+            click: () => onSelectFriend(friend.id),
+          }}
+        >
+        </Marker>
+      ))}
+
+      {/* Render Self */}
+      {userLocation && (
+        <Marker
+            position={[userLocation.lat, userLocation.lng]}
+            icon={createCustomIcon('https://api.dicebear.com/7.x/avataaars/svg?seed=Felix', false, true)}
+            zIndexOffset={1000}
+        >
+            <Popup className="font-sans font-medium text-sm">You are here</Popup>
+        </Marker>
+      )}
+    </MapContainer>
+  );
+};
+
+export default MapComponent;

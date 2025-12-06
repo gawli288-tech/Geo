@@ -1,0 +1,7 @@
+{
+  "name": "Copy of GeoKin",
+  "description": "A real-time family and friend location tracker powered by Gemini intelligence for safety insights and nearby recommendations.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
